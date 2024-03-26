@@ -14,25 +14,29 @@ flags += -pedantic
 flags += -I $(path)
 flags += -g
 
-link = $(cc) $(flags) -o
+linker_flags += -pthread
+# linker_flags += -lrt
+
+# link = $(cc) $(flags) -o
+link = $(cc) $(linker_flags) -o
 
 compile = $(cc) $(flags) -c -o
 
 all: client server
 
 client : client.o domain_socket.o
-	$(link) $@ $^
+	$(link) $@ $^ -lrt
 
-client.o : client.cc client.h
+client.o : client.cc client.h shm.h
 	$(compile) $@ $<
 
 server: server.o domain_socket.o
-	$(link) $@ $^
+	$(link) $@ $^ -lrt
 
-server.o : server.cc server.h
+server.o : server.cc server.h shm.h
 	$(compile) $@ $<
 
-domain_socket.o: domain_socket.cc domain_socket.h
+domain_socket.o: domain_socket.cc domain_socket.h shm.h
 	$(compile) $@ $<
 
 clean: 

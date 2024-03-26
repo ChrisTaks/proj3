@@ -4,6 +4,10 @@
 #define _PROJ3_CLIENT_H_
 
 #include <proj3/domain_socket.h>
+#include <proj3/shm.h>
+
+#include <sys/mman.h>
+#include <sys/unistd.h>
 
 #include <cstddef>
 #include <cstdlib>
@@ -12,7 +16,7 @@
 #include <algorithm>
 #include <iostream>
 
-const char kSocket_path[] = "socket_example";
+const char kSocket_path[] = "ctaks_socket";
 
 class DomainSocketClient : public DomainSocket {
  public:
@@ -31,6 +35,13 @@ class DomainSocketClient : public DomainSocket {
     bool IsOperator(std::string arg);
 
     std::string processEquation(std::string line);
+
+ private:
+    static const std::size_t kBufferSize = 1024;
+    static const std::size_t kSharedMemSize =
+    sizeof(SharedMemoryStore<kBufferSize>);
+
+    SharedMemoryStore<kSharedMemSize> *store_;
 };
 
-#endif  // _PROJ2_CLIENT_H_
+#endif  // _PROJ3_CLIENT_H_
