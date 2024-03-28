@@ -16,22 +16,21 @@
 #include <cstddef>  // size_t
 
 #define SERVER_SEM "ctaks_server"
+const char* kServerSem = "ctaks_server";
+const char* kClientSem = "ctaks_client";
+
 #define CLIENT_SEM "ctaks_client"
 
 #define SHMPATH "csvshmem"
 
+const int kArraySize = 4;
+const int kMemFourthSize = (1 << 19);
 
-
-template <std::size_t BufferSize>
 struct SharedMemoryStore {
-  static const size_t kBuffSize = 291000;
-  std::size_t buffer_size[4];
-  //std::size_t buffer_size;
-  char buffer[BufferSize];
-  std::string strBuffer;
+  std::size_t buffer_size[kArraySize];
+  char buffer[kArraySize][kMemFourthSize];
 };
 
 void quit();
-
 
 #endif  // _PROJ3_SHM_H_

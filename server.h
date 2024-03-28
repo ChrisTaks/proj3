@@ -31,12 +31,10 @@ class DomainSocketServer : public DomainSocket {
     void Run();
 
  private:
-    static const std::size_t kBufferSize = 1024;
-    static const std::size_t kSharedMemSize =
-    sizeof(SharedMemoryStore<kBufferSize>);
-
-    SharedMemoryStore<kSharedMemSize> *store_;
-
+     SharedMemoryStore *store_;
+     static const std::size_t kSharedMemSize = sizeof(store_->buffer);
 };
+
+void findLineNumberDivisibleBy4(int *lineNumber, int *counter);
 
 #endif  // _SERVER_H_

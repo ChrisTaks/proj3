@@ -37,11 +37,9 @@ class DomainSocketClient : public DomainSocket {
     std::string processEquation(std::string line);
 
  private:
-    static const std::size_t kBufferSize = 1024;
-    static const std::size_t kSharedMemSize =
-    sizeof(SharedMemoryStore<kBufferSize>);
-
-    SharedMemoryStore<kSharedMemSize> *store_;
+     // static const std::size_t kBufferSize = 1024;
+     SharedMemoryStore *store_;
+     static const std::size_t kSharedMemSize = sizeof(store_->buffer);
 };
 
 #endif  // _PROJ3_CLIENT_H_

@@ -52,8 +52,8 @@ void DomainSocketClient::Run(int argc, char *argv[]) {
 
   // open existing sempaphores on server
   std::cout << "[WIDPIO]: connecting semaphores" << std::endl;
-  sem_t *semServer = sem_open(SERVER_SEM, 0);
-  sem_t *semClient = sem_open(CLIENT_SEM, 0);
+  sem_t *semServer = sem_open(kServerSem, 0);
+  sem_t *semClient = sem_open(kClientSem, 0);
 
   int semVal1;
   int semVal2;
@@ -74,7 +74,7 @@ void DomainSocketClient::Run(int argc, char *argv[]) {
   }
   
   // map the shared memory
-  store_  = static_cast<SharedMemoryStore<kSharedMemSize>*>(
+  store_  = static_cast<SharedMemoryStore*>(
               ::mmap(NULL,
               kSharedMemSize,
               PROT_READ | PROT_WRITE,
@@ -122,6 +122,91 @@ void DomainSocketClient::Run(int argc, char *argv[]) {
   //snprintf(read_buffer, kBufferSize, "%s", store_->strBuffer);
 
   std::cout << "[WIDPIO]: checking if read: " << store_->buffer << std::endl;
+  std::cout << "[WIDPIO]: kSharedMemSize size: " << kSharedMemSize << std::endl;
+  std::cout << "[WIDPIO]: buffer size: " << sizeof(store_->buffer) << std::endl;
+  std::cout << "[WIDPIO]: kMemFourthSize size: " << kMemFourthSize << std::endl;
+  std::cout << "[WIDPIO]: buffer[0][1]: " << store_->buffer[0][1] << std::endl;
+  // for (int i = 0; i < sizeof(store_->buffer)-1; ++i) {
+  //   if (store_->buffer[i] == NULL) {
+  //     // do nothin
+  //   } else {
+  //     std::cout << store_->buffer[i];
+  //   }
+  // }
+
+  std::cout << "\nbuffer 0" << std::endl;
+  int lineNum = 1;
+  std::cout << lineNum << ": ";
+  for (int i = 0; i < kMemFourthSize; ++i) {
+    if (store_->buffer[0][i] == '\037') {
+      ++lineNum;
+      std::cout << std::endl;
+      std::cout << lineNum << ": ";
+    } else {
+    std::cout << store_->buffer[0][i];
+    }
+  }
+  std::cout << "\nbuffer 1" << std::endl;
+  for (int i = 0; i < kMemFourthSize; ++i) {
+    if (store_->buffer[1][i] == '\037') {
+      ++lineNum;
+      std::cout << std::endl;
+      std::cout << lineNum << ": ";
+    } else {
+    std::cout << store_->buffer[1][i];
+    }
+  }
+  std::cout << "\nbuffer 2" << std::endl;
+  for (int i = 0; i < kMemFourthSize; ++i) {
+    if (store_->buffer[2][i] == '\037') {
+      ++lineNum;
+      std::cout << std::endl;
+      std::cout << lineNum << ": ";
+    } else {
+    std::cout << store_->buffer[2][i];
+    }
+  }
+  std::cout << "\nbuffer 3" << std::endl;
+  for (int i = 0; i < kMemFourthSize; ++i) {
+    if (store_->buffer[3][i] == '\037') {
+      ++lineNum;
+      std::cout << std::endl;
+      std::cout << lineNum << ": ";
+    } else {
+    std::cout << store_->buffer[3][i];
+    }
+  }
+
+lineNum = 1;
+std::cout << "\n" << lineNum << ": ";
+for (size_t i = 0; i < kArraySize; ++i) {
+  for (int j = 0; j < kMemFourthSize; ++j) {
+    if (store_->buffer[i][j] == kUS) {
+      ++lineNum;
+      std::cout << std::endl;
+      std::cout << lineNum << ": ";
+    } else if (store_->buffer[i][j] == NULL) {
+      // do nuffin
+    } else {
+      std::cout << store_->buffer[i][j];
+    }
+  }
+}
+
+    // std::cout << store_->buffer[0];
+    // std::cout << "\nEnd buffer 0" << std::endl;
+    // std::cout << store_->buffer[1];
+    // std::cout << "\nEnd buffer 1" << std::endl;
+    // std::cout << store_->buffer[2];
+    // std::cout << "\nEnd buffer 2" << std::endl;
+    // std::cout << store_->buffer[3];
+    // std::cout << "\nEnd buffer 3" << std::endl;
+  // while (store_->buffer[i] != NULL) {
+  //   std::cout << store_->buffer[i];
+  // }
+
+
+
   // for (int i = 0; i < sizeof(store_->buffer); ++i) {
   //   if (store_->buffer[i] == NULL) {
   //     // std::cout << i << " ";
@@ -131,55 +216,8 @@ void DomainSocketClient::Run(int argc, char *argv[]) {
   // }
   // std::cout << std::endl;
 
-  // // TODO: fix below this
-  // // recieve the data
-  // std::string msg;
+ // TODO: pthread it up
 
-  // ::ssize_t bytes_read = Read(&msg);
-  // std::cout << "BYTES RECEIVED: " << bytes_read << std::endl;
-  // if (bytes_read < 0) {
-  //   std::cerr << "Server shutting down..." << std::endl;
-  //   exit(0);
-  // } else if (bytes_read) {
-  //   Close(socket_fd_);
-  // }
-
-  // ::size_t found = msg.find("INVALID");
-  // if (found != std::string::npos) {
-  //   std::cout << "ERROR: " << msg << std::endl;
-  //   exit(1);
-  // }
-
-  // // print/process the data
-  // std::vector<std::string> theLines;
-  // std::string toBeAdded;
-  // for (size_t i = 0; i < msg.size(); ++i) {
-  //   if ((msg[i] == kUS || msg[i] == kEoT) && toBeAdded.size() > 0) {
-  //     theLines.push_back(toBeAdded);
-  //     toBeAdded = "";
-  //   } else {
-  //     toBeAdded += msg[i];
-  //   }
-  // }
-
-  // // sort line numbers
-  // std::vector<int> lineNumbers;
-  // for (int i = 3; i < argc; ++i) {
-  //   lineNumbers.push_back(std::stoi(argv[i]));
-  // }
-  // std::sort(lineNumbers.begin(), lineNumbers.end());
-
-  // int lineNumber = 0;
-  // for (std::string line : theLines) {
-  //   std::string finishedLine = "line ";
-  //   finishedLine += std::to_string(lineNumbers[lineNumber]);
-  //   finishedLine += ": ";
-  //   finishedLine += line;
-  //   finishedLine += " = ";
-  //   finishedLine += processEquation(line);
-  //   std::cout << finishedLine << std::endl;
-  //   ++lineNumber;
-  // }
 }
 
 double DomainSocketClient::AddNumbers(double a, double b) {
