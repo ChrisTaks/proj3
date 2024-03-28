@@ -6,9 +6,8 @@
 #include <iostream>
 #include <sys/sysinfo.h>
 
-// struct SharedMemoryStore* shmpt;
-
 void DomainSocketServer::Run() {
+  // Domain Socket stuff.
   int socket_fd;
 
   if (!Init()) {
@@ -23,26 +22,25 @@ void DomainSocketServer::Run() {
   if (!Listen(sizenum)) {
     exit(-3);
   }
+
+  // cleanup.
   signal(SIGTERM, exit);
   signal(SIGINT, exit);
 
-  // make sure semaphores do not already exit
+  // make sure semaphores do not already exit.
   sem_unlink(SERVER_SEM);
   sem_unlink(CLIENT_SEM);
 
-  // create new semaphores
+  // create new semaphores.
   sem_t *semServer = sem_open(kServerSem, O_CREAT, 0660, 0);
   sem_t *semClient = sem_open(kClientSem, O_CREAT, 0660, 0);
   int semVal1;
   int semVal2;
   sem_getvalue(semServer, &semVal1);
-  //std::cout << "[WIDPIO]: semServer created. Val: " << semVal1 << std::endl;
   sem_getvalue(semClient, &semVal2);
-  //std::cout << "[WIDPIO]: semClient created. Val: " << semVal2 << std::endl;
 
   // STEP 1
   std::cout << "SERVER STARTED" << std::endl;
-  std::cout << "MAX CLIENTS: " << get_nprocs_conf() << std::endl;
 
   while (true) {
     std::vector<std::string> badArgs;
@@ -55,7 +53,7 @@ void DomainSocketServer::Run() {
     }
 
     // STEP 2
-    // reading the message sent from the client
+    // reading the message sent from the client.
     std::string msg;
      ::ssize_t bytes_read = Read(&msg, socket_fd);
 
@@ -63,43 +61,28 @@ void DomainSocketServer::Run() {
        std::cerr << "Server shutting down..." << std::endl;
        exit(0);
       }
-  
+
     std:: cout << "CLIENT REQUEST RECEIVED" << std::endl;
 
-    // TODO: open shared memory
-    // struct SharedMemoryStore shmp;
+    // wait for client to open shared memory.
+    sem_wait(semClient);  // 1C (wait on 1C to post).
 
-    // proper cleanup
-    
-
-    // wait for client to open shared memory
-    //std::cout << "[WIDPIO]: waiting on client to open shm" << std::endl;
-    int semVal;
-    sem_getvalue(semClient, &semVal);
-   // std::cout << "[WIDPIO]: semClient: " << semVal << std::endl;
-    sem_wait(semClient); // 1C (wait on 1C to post)
-
-    // so does shm_open
-    
+    // STEP 3
+    // open the shared memory.
     int shmfd = shm_open(SHMPATH, O_RDWR, 0);
-
-    std::cout << "[WIDPIO]: linking shared memory" << std::endl;
     store_ = static_cast<SharedMemoryStore*>(mmap(NULL,
                 kSharedMemSize,
                 PROT_READ | PROT_WRITE,
                 MAP_SHARED,
                 shmfd,
                 0));
-    
-    //char read_buffer[kBufferSize];
 
-    // wait for client to be ready to read
-    std::cout << "[WIDPIO]: waiting on client to be ready to read" << std::endl;
-    sem_wait(semClient); // 2C (wait on 2C to post)
+    std::cout << "\tMEMORY OPEN" << std::endl;
 
-    // sem_post(semServer); // 0S (letting client post 2C) this deadlocks btw
+    // wait for client to be ready to read.
+    sem_wait(semClient);  // 2C (wait on 2C to post).
 
-    // parse the msg and add to theArgs whenever a delimiter is found
+    // parse the msg and add to theArgs whenever a delimiter is found.
     std::vector<std::string> theArgs;
     std::string toBeAdded;
     for (size_t i = 0; i < msg.size(); ++i) {
@@ -111,106 +94,70 @@ void DomainSocketServer::Run() {
       }
     }
 
-    // initializing the string vectors that will be written to memory
-    std::vector<std::string> finalLine;
+    // initializing the string vectors that will be written to memory.
     std::string oneFourth;
     std::string twoFourths;
     std::string threeFourths;
     std::string fourFourths;
 
-    std::string errorPath = "INVALID FILE: ";
-    //std::size_t error_bytes = 0;
+    // STEP 4
+    // opening file.
     std::cout << "\tOPENING: \"" << theArgs[0] << "\"" <<std::endl;
     std::ifstream equationFile(theArgs[0]);
     if (!equationFile.is_open()) {
-      errorPath += theArgs[0];
-      //error_bytes = Write(errorPath, socket_fd);
-      //std::cout << "BYTES SENT: " << error_bytes << std::endl;
+      sem_post(semServer);  // 1S (if file fails).
+      std::cerr << "\tFILE FAILED TO OPEN" << std::endl;
+      ::ssize_t bytes_wrote = Write("1", socket_fd);
+      if (bytes_wrote < 0) {
+        std::cerr << "\tFAILED TO WRITE TO SOCKET" << std::endl;
+      }
+      Close(socket_fd);
     } else {
-      // identify the amount of lines
+      // file succeeds
+      ::size_t bytes_wrote = Write("0", socket_fd);
+      if (bytes_wrote < 0) {
+        std::cerr << "\tFAILED TO WRITE TO SOCKET" << std::endl;
+      }
+      // identify the amount of lines.
       int lineCount = std::stoi(theArgs[1]);
 
-      std::string errorLine = "FILE HAS DIFFERING NUMBER OF LINES THAN ARGUMENT ";
-
-      // dividing the file up
+      // dividing the file up.
       int counter = 0;
       findLineNumberDivisibleBy4(&lineCount, &counter);
-      //std::cout << "[WIDPIO]: lineCount%: " << lineCount << std::endl;
 
-      // File reading
+      // File reading.
       std::string equationLine;
       int lineNumber = 0;
       while (std::getline(equationFile, equationLine)) {
         ++lineNumber;
-        finalLine.push_back(equationLine);
         if (lineNumber <= lineCount * 1 / 4) {
-          // add to first vector
+          // add to first vector.
           oneFourth += equationLine += kUS;
         } else if (lineNumber <= lineCount * 2 / 4) {
-          // add to second vector
+          // add to second vector.
           twoFourths += equationLine += kUS;
         } else if (lineNumber <= lineCount * 3 / 4) {
-          // add to third vector
+          // add to third vector.
           threeFourths += equationLine += kUS;
         } else {
-          // add to fourth vector (will also add the lines not in lineCount)
+          // add to fourth vector (will also add the lines not in lineCount).
           fourFourths += equationLine += kUS;
-        } 
+        }
       }
-    // bool foundBadLine = false;
-    // if (lineNumber != lineCount) {
-    //   foundBadLine = true;
-    // }
-    // if (foundBadLine) {
-    //   error_bytes = Write(errorLine, socket_fd);
-    //   std::cout << "BYTES SENT: " << error_bytes << std::endl;
-    // }
+      equationFile.close();
+      std::cout << "\tFILE CLOSED" << std::endl;
+
+      // load the file into shared memory.
+      strncpy(store_->buffer[0], oneFourth.c_str(), kMemFourthSize);
+      strncpy(store_->buffer[1], twoFourths.c_str(), kMemFourthSize);
+      strncpy(store_->buffer[2], threeFourths.c_str(), kMemFourthSize);
+      strncpy(store_->buffer[3], fourFourths.c_str(), kMemFourthSize);
+
+      sem_post(semServer);  // 1S (posting, client can now read).
     }
-    equationFile.close();
-
-    // builds a single string from the vector of final lines
-    std::string finalInput;
-    for (std::string line : finalLine) {
-      finalInput += line;
-      finalInput += kUS;
-    }
-    std::cout << "[WIDPIO]: final line: " << finalLine.size() << std::endl;
-    // finalInput += kEoT;
-
-    //std::cout << "[WIDPIO]: finalInput: " << finalInput << std::endl;
-    // char write_buffer[kBufferSize] = "just a test\n";
-    //const char *write_buffer = finalInput.c_str();
-
-    // while(semClient == 0) {
-    // // load finalInput into shared memory
-    // snprintf(shmpt->buffer, shmp.kBuffSize, "%s", finalInput);
-    // }
-
-    // load the file into shared memory
-    strncpy(store_->buffer[0], oneFourth.c_str(), kMemFourthSize);
-    strncpy(store_->buffer[1], twoFourths.c_str(), kMemFourthSize);
-    strncpy(store_->buffer[2], threeFourths.c_str(), kMemFourthSize);
-    strncpy(store_->buffer[3], fourFourths.c_str(), kMemFourthSize);
-
-    sem_post(semServer); // 1S (posting, client can now read)
-
-
-  }
-  //   // send the data
-  //   ::size_t bytes_wrote;
-  //   if (!error_bytes) {
-  //     bytes_wrote = Write(finalInput, socket_fd);
-  //     std::cout << "BYTES SENT: " << bytes_wrote << std::endl;
-  //   }
-  //     if (bytes_wrote < 0) {
-  //       std::cerr << "Server terminating..." << std::endl;
-  //       exit(3);
-  //     }
-     Close(socket_fd);
-  //   // clears
-  //   finalLine.clear();
-  //   theArgs.clear();
-  // }  // end while loop
+    // TODO: close shared memory.
+    ::munmap(store_, sizeof(store_));
+  }  // end while main while loop.
 }
 
 void findLineNumberDivisibleBy4(int *lineNumber, int *counter) {

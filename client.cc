@@ -33,7 +33,7 @@ void DomainSocketClient::Run(int argc, char *argv[]) {
   finalInput += kEoT;
   std::cout << "argc: " << argc << std::endl;
   std::cout << "[WIDPIO]: to be written: \"" << finalInput << "\"" << std::endl;
-  
+
   // write the input
   ::size_t bytes_wrote = Write(finalInput);
   std::cout << "[WIDPIO]: done writing" << std::endl;
@@ -46,7 +46,6 @@ void DomainSocketClient::Run(int argc, char *argv[]) {
     exit(4);
   }
 
-  //struct SharedMemoryStore shmp;
   // make sure shared memory does not already exist
   shm_unlink(SHMPATH);
 
@@ -63,16 +62,16 @@ void DomainSocketClient::Run(int argc, char *argv[]) {
   std::cout << "[WIDPIO]: semClient connected. Val: " << semVal2 << std::endl;
 
 
-  // create shared memory  
+  // create shared memory.
   int shmfd = shm_open(SHMPATH, O_CREAT | O_EXCL | O_RDWR,
-                         S_IRUSR | S_IWUSR );
+                         S_IRUSR | S_IWUSR);
 
   // Truncate the memory
   if (::ftruncate(shmfd, kSharedMemSize) < 0) {
     std::cerr << ::strerror(errno) << std::endl;
     ::exit(errno);
   }
-  
+
   // map the shared memory
   store_  = static_cast<SharedMemoryStore*>(
               ::mmap(NULL,
@@ -89,50 +88,35 @@ void DomainSocketClient::Run(int argc, char *argv[]) {
 
   while (semServer == 0) {}
 
-    std::cout << "[WIDPIO]: entering semaphore while loop" << std::endl;
     // notify server that shared memory is created
-    std::cout << "[WIDPIO]: notifying server that shm is created" << std::endl;
-    int semVal3;
-    sem_getvalue(semClient, &semVal3);
-    std::cout << "[WIDPIO]: semClient before val: " << semVal3 << std::endl;
-    sem_post(semClient); // 1C (posting, letting 1C go on server side)
-    int semVal;
-    sem_getvalue(semClient, &semVal);
-    std::cout << "[WIDPIO]: semClient after val: " << semVal << std::endl;
+    sem_post(semClient);  // 1C (posting, letting 1C go on server side)
 
     // notify server that client is ready to read
-    // sem_wait(semServer); // 0S (waiting on server to wait on client) this deadlocks btw
-
-    sem_post(semClient); // 2C (posting, letting 2C go on server side)
-    sem_getvalue(semClient, &semVal);
-    std::cout << "[WIDPIO]: semClient after val: " << semVal << std::endl;
+    sem_post(semClient);  // 2C (posting, letting 2C go on server side)
 
   // wait on server to be finished writing to sharedmem
-  std::cout << "[WIDPIO]: waiting on server to finish writing" << std::endl;
-    int semVal4;
-    sem_getvalue(semClient, &semVal4);
-    std::cout << "[WIDPIO]: semClient: " << semVal4 << std::endl;
-  sem_wait(semServer); // 1S (waiting on 1S server to post)
+  sem_wait(semServer);  // 1S (waiting on 1S server to post)
+
+  std::string serverMessage;
+  ::ssize_t bytes_read = Read(&serverMessage);
+  if (bytes_read < 0) {
+    std::cerr << "BYTES FAILED TO WRITE" << std::endl;
+  }
+
+  if (std::stoi(serverMessage)) {
+    std::cout << "ERROR: INVALID FILE \"" << argv[1] << "\"" << std::endl;
+    exit(1);
+  }
 
   // read string from shared memory
-  // char read_buffer[kBufferSize];
   std::string message;
   std::cout << "[WIDPIO]: reading from shm" << std::endl;
-  // snprintf(read_buffer, kBufferSize, "%s", store_->buffer);
-  //snprintf(read_buffer, kBufferSize, "%s", store_->strBuffer);
 
   std::cout << "[WIDPIO]: checking if read: " << store_->buffer << std::endl;
   std::cout << "[WIDPIO]: kSharedMemSize size: " << kSharedMemSize << std::endl;
   std::cout << "[WIDPIO]: buffer size: " << sizeof(store_->buffer) << std::endl;
   std::cout << "[WIDPIO]: kMemFourthSize size: " << kMemFourthSize << std::endl;
   std::cout << "[WIDPIO]: buffer[0][1]: " << store_->buffer[0][1] << std::endl;
-  // for (int i = 0; i < sizeof(store_->buffer)-1; ++i) {
-  //   if (store_->buffer[i] == NULL) {
-  //     // do nothin
-  //   } else {
-  //     std::cout << store_->buffer[i];
-  //   }
-  // }
 
   std::cout << "\nbuffer 0" << std::endl;
   int lineNum = 1;
@@ -216,8 +200,7 @@ for (size_t i = 0; i < kArraySize; ++i) {
   // }
   // std::cout << std::endl;
 
- // TODO: pthread it up
-
+// TODO: pthread it up
 }
 
 double DomainSocketClient::AddNumbers(double a, double b) {
@@ -291,7 +274,7 @@ std::string DomainSocketClient::processEquation(std::string line) {
 int main(int argc, char *argv[]) {
   if (argc != 3) {
     std::cerr << "Wrong amount of arguments. Client terminating...\n"
-              << "./client ./dat/equations_<number>.txt <number>" 
+              << "./client ./dat/equations_<number>.txt <number>"
               << std::endl;
     return 0;
   }
