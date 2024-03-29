@@ -8,6 +8,8 @@
 #include <iostream>
 #include <vector>
 #include <string>
+#include <sstream>
+#include <iomanip>
 
 // struct SharedMemoryStore<kBufferSize> *shmpt;
 
@@ -30,13 +32,9 @@ void DomainSocketClient::Run(int argc, char *argv[]) {
     finalInput += input;
     finalInput += kUS;
   }
-  finalInput += kEoT;
-  std::cout << "argc: " << argc << std::endl;
-  std::cout << "[WIDPIO]: to be written: \"" << finalInput << "\"" << std::endl;
 
   // write the input
   ::size_t bytes_wrote = Write(finalInput);
-  std::cout << "[WIDPIO]: done writing" << std::endl;
 
   if (bytes_wrote < 0) {
     std::cerr << "Client terminating..." << std::endl;
@@ -50,17 +48,8 @@ void DomainSocketClient::Run(int argc, char *argv[]) {
   shm_unlink(SHMPATH);
 
   // open existing sempaphores on server
-  std::cout << "[WIDPIO]: connecting semaphores" << std::endl;
   sem_t *semServer = sem_open(kServerSem, 0);
   sem_t *semClient = sem_open(kClientSem, 0);
-
-  int semVal1;
-  int semVal2;
-  sem_getvalue(semServer, &semVal1);
-  std::cout << "[WIDPIO]: semServer connected. Val: " << semVal1 << std::endl;
-  sem_getvalue(semClient, &semVal2);
-  std::cout << "[WIDPIO]: semClient connected. Val: " << semVal2 << std::endl;
-
 
   // create shared memory.
   int shmfd = shm_open(SHMPATH, O_CREAT | O_EXCL | O_RDWR,
@@ -110,13 +99,9 @@ void DomainSocketClient::Run(int argc, char *argv[]) {
 
   // read string from shared memory
   std::string message;
-  std::cout << "[WIDPIO]: reading from shm" << std::endl;
-
-  std::cout << "[WIDPIO]: checking if read: " << store_->buffer << std::endl;
   std::cout << "[WIDPIO]: kSharedMemSize size: " << kSharedMemSize << std::endl;
   std::cout << "[WIDPIO]: buffer size: " << sizeof(store_->buffer) << std::endl;
   std::cout << "[WIDPIO]: kMemFourthSize size: " << kMemFourthSize << std::endl;
-  std::cout << "[WIDPIO]: buffer[0][1]: " << store_->buffer[0][1] << std::endl;
 
   std::cout << "\nbuffer 0" << std::endl;
   int lineNum = 1;
@@ -161,69 +146,96 @@ void DomainSocketClient::Run(int argc, char *argv[]) {
     }
   }
 
-lineNum = 1;
-std::cout << "\n" << lineNum << ": ";
-for (size_t i = 0; i < kArraySize; ++i) {
-  for (int j = 0; j < kMemFourthSize; ++j) {
-    if (store_->buffer[i][j] == kUS) {
-      ++lineNum;
-      std::cout << std::endl;
-      std::cout << lineNum << ": ";
-    } else if (store_->buffer[i][j] == NULL) {
-      // do nuffin
-    } else {
-      std::cout << store_->buffer[i][j];
-    }
+// lineNum = 1;
+// std::cout << "\n" << lineNum << ": ";
+// for (size_t i = 0; i < kArraySize; ++i) {
+//   for (int j = 0; j < kMemFourthSize; ++j) {
+//     if (store_->buffer[i][j] == kUS) {
+//       ++lineNum;
+//       std::cout << std::endl;
+//       std::cout << lineNum << ": ";
+//     } else if (store_->buffer[i][j] == NULL) {
+//       // do nuffin
+//     } else {
+//       std::cout << store_->buffer[i][j];
+//     }
+//   }
+// }
+
+  // STEP 3
+  // creating structs of pthread data
+  struct ThreadData threadData[kThreadNum];
+  for (int i = 0; i < kThreadNum; ++i) {
+    threadData[i].memArrayNumber = i;
   }
+
+  // creating pthreads
+  pthread_t threads[kThreadNum];
+  for (pthread_t t_id = 0; t_id < 4; ++t_id) {
+    ::pthread_create(&threads[t_id],
+                     NULL,
+                     processThread,
+                     reinterpret_cast<void*>(&threadData[t_id]));
+  }
+
+  for (pthread_t t_id = 0; t_id < kThreadNum; ++t_id) {
+    pthread_join(threads[t_id], NULL);
+  }
+
+  // processing final sum
+  double finalSum = (threadData[0].sum + threadData[1].sum + threadData[2].sum + threadData[3].sum);
+  std::cout << "FINAL SUM: " << finalSum << std::endl;
+  std::locale comma_locale("en_US.UTF-8");
+  std::cout << std::fixed << std::setprecision(2);
+  std::cout.imbue(comma_locale);
+  std::cout << finalSum << std::endl;
 }
 
-    // std::cout << store_->buffer[0];
-    // std::cout << "\nEnd buffer 0" << std::endl;
-    // std::cout << store_->buffer[1];
-    // std::cout << "\nEnd buffer 1" << std::endl;
-    // std::cout << store_->buffer[2];
-    // std::cout << "\nEnd buffer 2" << std::endl;
-    // std::cout << store_->buffer[3];
-    // std::cout << "\nEnd buffer 3" << std::endl;
-  // while (store_->buffer[i] != NULL) {
-  //   std::cout << store_->buffer[i];
-  // }
+void* processThread(void* input) {
+  struct ThreadData* data = reinterpret_cast<struct ThreadData*>(input);
+  std::cout << "[WIDPIO]: oh yeah, it's thread time: " << data->memArrayNumber << std::endl;
+  std::string line;
+  for (size_t i = 0; i < kMemFourthSize; ++i) {
+    if ((store_->buffer[data->memArrayNumber][i] == DomainSocket::kUS ||
+        store_->buffer[data->memArrayNumber][i] == DomainSocket::kEoT) &&
+        line.size() > 0) {
+          std::cout << "[WIDPIO]: processing line: " << line << std::endl;
+          //line += ' ';
+          data->sum = (data->sum + processEquation(line));
+          line = "";
+          //line += ' ';
+          //data->sum += processEquation(line);
+       } else if (store_->buffer[data->memArrayNumber][i] != NULL) {
+        line += store_->buffer[data->memArrayNumber][i];
+       }
+  }
+  //data->sum = processEquation(line);
+  std::cout << "final sum: thread: " << data->memArrayNumber << ": " << data->sum << std::endl;
 
-
-
-  // for (int i = 0; i < sizeof(store_->buffer); ++i) {
-  //   if (store_->buffer[i] == NULL) {
-  //     // std::cout << i << " ";
-  //   } else {
-  //     std::cout << store_->buffer[i];
-  //   }
-  // }
-  // std::cout << std::endl;
-
-// TODO: pthread it up
+  return nullptr;
 }
 
-double DomainSocketClient::AddNumbers(double a, double b) {
+double AddNumbers(double a, double b) {
   return a + b;
 }
 
-double DomainSocketClient::SubtractNumbers(double a, double b) {
+double SubtractNumbers(double a, double b) {
   return a - b;
 }
 
-double DomainSocketClient::MultiplyNumbers(double a, double b) {
+double MultiplyNumbers(double a, double b) {
   return a * b;
 }
 
-double DomainSocketClient::DivideNumbers(double a, double b) {
+double DivideNumbers(double a, double b) {
   return a / b;
 }
 
-bool DomainSocketClient::IsOperator(std::string arg) {
+bool IsOperator(std::string arg) {
   return arg == "+" || arg == "-" || arg == "x" || arg == "/";
 }
 
-std::string DomainSocketClient::processEquation(std::string line) {
+double processEquation(std::string line) {
   std::vector<double> numbers;
   std::vector<std::string> operators;
   // break up the string
@@ -231,6 +243,7 @@ std::string DomainSocketClient::processEquation(std::string line) {
   std::string component;
   for (char c : line) {
     if (c != ' ') {
+      //std::cout << "[WIDPIO]: adding \"" << c << "\"" << std::endl;
       component += c;
     } else {
       args.push_back(component);
@@ -246,14 +259,17 @@ std::string DomainSocketClient::processEquation(std::string line) {
         double a = numbers.back();
         numbers.pop_back();
         if (operators.back() == "x") {
+          std::cout << "[WIDPIO]: stod(x) " << args[i+1] << std::endl;
           numbers.push_back(MultiplyNumbers(a, std::stod(args[i+1])));
         }
         if (operators.back() == "/") {
+      std::cout << "[WIDPIO]: stod(/) " << args[i+1] << std::endl;
           numbers.push_back(DivideNumbers(a, std::stod(args[i+1])));
         }
         ++i;  // iterate past the next variable since it was already used
       }
     } else {
+      std::cout << "[WIDPIO]: stod(else) " << args[i] << std::endl;
       numbers.push_back(std::stod(args[i]));
     }
   }
@@ -268,7 +284,7 @@ std::string DomainSocketClient::processEquation(std::string line) {
       numbers.erase(numbers.begin()+1);
     }
   }
-  return std::to_string(static_cast<int>(numbers[0]));
+  return numbers[0];
 }
 
 int main(int argc, char *argv[]) {

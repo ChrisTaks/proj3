@@ -157,6 +157,7 @@ void DomainSocketServer::Run() {
     }
     // TODO: close shared memory.
     ::munmap(store_, sizeof(store_));
+    std::clog << "\tMEMORY CLOSED" << std::endl;
   }  // end while main while loop.
 }
 
