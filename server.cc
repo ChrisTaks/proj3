@@ -34,10 +34,6 @@ void DomainSocketServer::Run() {
   // create new semaphores.
   sem_t *semServer = sem_open(kServerSem, O_CREAT, 0660, 0);
   sem_t *semClient = sem_open(kClientSem, O_CREAT, 0660, 0);
-  int semVal1;
-  int semVal2;
-  sem_getvalue(semServer, &semVal1);
-  sem_getvalue(semClient, &semVal2);
 
   // STEP 1
   std::cout << "SERVER STARTED" << std::endl;
@@ -70,13 +66,16 @@ void DomainSocketServer::Run() {
     // STEP 3
     // open the shared memory.
     int shmfd = shm_open(SHMPATH, O_RDWR, 0);
-    store_ = static_cast<SharedMemoryStore*>(mmap(NULL,
+    store_ = reinterpret_cast<struct SharedMemoryStore*>(mmap(NULL,
                 kSharedMemSize,
                 PROT_READ | PROT_WRITE,
                 MAP_SHARED,
                 shmfd,
                 0));
 
+    if (store_ == MAP_FAILED) {
+      std::cout << "MAP_FAILED" << std::endl;
+    }
     std::cout << "\tMEMORY OPEN" << std::endl;
 
     // wait for client to be ready to read.
@@ -157,8 +156,13 @@ void DomainSocketServer::Run() {
     }
     // TODO: close shared memory.
     ::munmap(store_, sizeof(store_));
+    ::close(shmfd);
     std::clog << "\tMEMORY CLOSED" << std::endl;
   }  // end while main while loop.
+  
+  // destroy semaphores.
+  sem_unlink(SERVER_SEM);
+  sem_unlink(CLIENT_SEM);
 }
 
 void findLineNumberDivisibleBy4(int *lineNumber, int *counter) {

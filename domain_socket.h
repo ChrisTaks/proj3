@@ -23,6 +23,8 @@ class DomainSocket {
 
     static const char kUS = '\037';
 
+    static const char kNULL = '\0';
+
     explicit DomainSocket(const char *socket_path, bool abstract = true);
 
     bool Init(int domain = AF_UNIX, int type = SOCK_STREAM, int protocol = 0);

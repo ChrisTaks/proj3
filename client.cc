@@ -33,16 +33,7 @@ void DomainSocketClient::Run(int argc, char *argv[]) {
     finalInput += kUS;
   }
 
-  // write the input
-  ::size_t bytes_wrote = Write(finalInput);
 
-  if (bytes_wrote < 0) {
-    std::cerr << "Client terminating..." << std::endl;
-    exit(3);
-  } else if (bytes_wrote == 0) {
-    std::cerr << "Server disconnected" << std::endl;
-    exit(4);
-  }
 
   // make sure shared memory does not already exist
   shm_unlink(SHMPATH);
@@ -62,7 +53,7 @@ void DomainSocketClient::Run(int argc, char *argv[]) {
   }
 
   // map the shared memory
-  store_  = static_cast<SharedMemoryStore*>(
+  store_  = reinterpret_cast<struct SharedMemoryStore*>(
               ::mmap(NULL,
               kSharedMemSize,
               PROT_READ | PROT_WRITE,
@@ -75,6 +66,19 @@ void DomainSocketClient::Run(int argc, char *argv[]) {
     exit(errno);
   }
 
+  std::cout << "SHARED MEMORY ALLOCATED: " << kSharedMemSize
+            << " BYTES" << std::endl;
+
+  // write the input
+  ::size_t bytes_wrote = Write(finalInput);
+
+  if (bytes_wrote < 0) {
+    std::cerr << "Client terminating..." << std::endl;
+    exit(3);
+  } else if (bytes_wrote == 0) {
+    std::cerr << "Server disconnected" << std::endl;
+    exit(4);
+  }
   while (semServer == 0) {}
 
     // notify server that shared memory is created
@@ -97,70 +101,9 @@ void DomainSocketClient::Run(int argc, char *argv[]) {
     exit(1);
   }
 
-  // read string from shared memory
-  std::string message;
-  std::cout << "[WIDPIO]: kSharedMemSize size: " << kSharedMemSize << std::endl;
-  std::cout << "[WIDPIO]: buffer size: " << sizeof(store_->buffer) << std::endl;
-  std::cout << "[WIDPIO]: kMemFourthSize size: " << kMemFourthSize << std::endl;
-
-  std::cout << "\nbuffer 0" << std::endl;
-  int lineNum = 1;
-  std::cout << lineNum << ": ";
-  for (int i = 0; i < kMemFourthSize; ++i) {
-    if (store_->buffer[0][i] == '\037') {
-      ++lineNum;
-      std::cout << std::endl;
-      std::cout << lineNum << ": ";
-    } else {
-    std::cout << store_->buffer[0][i];
-    }
-  }
-  std::cout << "\nbuffer 1" << std::endl;
-  for (int i = 0; i < kMemFourthSize; ++i) {
-    if (store_->buffer[1][i] == '\037') {
-      ++lineNum;
-      std::cout << std::endl;
-      std::cout << lineNum << ": ";
-    } else {
-    std::cout << store_->buffer[1][i];
-    }
-  }
-  std::cout << "\nbuffer 2" << std::endl;
-  for (int i = 0; i < kMemFourthSize; ++i) {
-    if (store_->buffer[2][i] == '\037') {
-      ++lineNum;
-      std::cout << std::endl;
-      std::cout << lineNum << ": ";
-    } else {
-    std::cout << store_->buffer[2][i];
-    }
-  }
-  std::cout << "\nbuffer 3" << std::endl;
-  for (int i = 0; i < kMemFourthSize; ++i) {
-    if (store_->buffer[3][i] == '\037') {
-      ++lineNum;
-      std::cout << std::endl;
-      std::cout << lineNum << ": ";
-    } else {
-    std::cout << store_->buffer[3][i];
-    }
-  }
-
-// lineNum = 1;
-// std::cout << "\n" << lineNum << ": ";
-// for (size_t i = 0; i < kArraySize; ++i) {
-//   for (int j = 0; j < kMemFourthSize; ++j) {
-//     if (store_->buffer[i][j] == kUS) {
-//       ++lineNum;
-//       std::cout << std::endl;
-//       std::cout << lineNum << ": ";
-//     } else if (store_->buffer[i][j] == NULL) {
-//       // do nuffin
-//     } else {
-//       std::cout << store_->buffer[i][j];
-//     }
-//   }
-// }
+  std::locale comma_locale("en_US.UTF-8");
+  std::cout << std::fixed << std::setprecision(2);
+  std::cout.imbue(comma_locale);
 
   // STEP 3
   // creating structs of pthread data
@@ -178,40 +121,43 @@ void DomainSocketClient::Run(int argc, char *argv[]) {
                      reinterpret_cast<void*>(&threadData[t_id]));
   }
 
+  std::cout << "THREADS CREATED" << std::endl;
   for (pthread_t t_id = 0; t_id < kThreadNum; ++t_id) {
-    pthread_join(threads[t_id], NULL);
+    ::pthread_join(threads[t_id], NULL);
   }
 
   // processing final sum
-  double finalSum = (threadData[0].sum + threadData[1].sum + threadData[2].sum + threadData[3].sum);
-  std::cout << "FINAL SUM: " << finalSum << std::endl;
-  std::locale comma_locale("en_US.UTF-8");
-  std::cout << std::fixed << std::setprecision(2);
-  std::cout.imbue(comma_locale);
-  std::cout << finalSum << std::endl;
+  double finalSum = (threadData[0].sum +
+                     threadData[1].sum +
+                     threadData[2].sum +
+                     threadData[3].sum);
+    std::cout << "------------------------------" << std::endl;
+    std::cout << "FINAL SUM: " << finalSum << std::endl;
+
+  // destory shared memory
+  ::munmap(store_, sizeof(store_));
+  ::shm_unlink(SHMPATH);
 }
 
 void* processThread(void* input) {
   struct ThreadData* data = reinterpret_cast<struct ThreadData*>(input);
-  std::cout << "[WIDPIO]: oh yeah, it's thread time: " << data->memArrayNumber << std::endl;
   std::string line;
   for (size_t i = 0; i < kMemFourthSize; ++i) {
     if ((store_->buffer[data->memArrayNumber][i] == DomainSocket::kUS ||
         store_->buffer[data->memArrayNumber][i] == DomainSocket::kEoT) &&
         line.size() > 0) {
-          std::cout << "[WIDPIO]: processing line: " << line << std::endl;
-          //line += ' ';
           data->sum = (data->sum + processEquation(line));
           line = "";
-          //line += ' ';
-          //data->sum += processEquation(line);
-       } else if (store_->buffer[data->memArrayNumber][i] != NULL) {
+          ++data->lines;
+       } else if (store_->buffer[data->memArrayNumber][i]
+                  != DomainSocket::kNULL) {
         line += store_->buffer[data->memArrayNumber][i];
        }
   }
-  //data->sum = processEquation(line);
-  std::cout << "final sum: thread: " << data->memArrayNumber << ": " << data->sum << std::endl;
-
+  // Printing each thread out
+  std::cout << " THREAD " << data->memArrayNumber
+            << " LINES: " << data->lines
+            << " TOTAL: " << data->sum << std::endl;
   return nullptr;
 }
 
@@ -243,7 +189,6 @@ double processEquation(std::string line) {
   std::string component;
   for (char c : line) {
     if (c != ' ') {
-      //std::cout << "[WIDPIO]: adding \"" << c << "\"" << std::endl;
       component += c;
     } else {
       args.push_back(component);
@@ -259,17 +204,14 @@ double processEquation(std::string line) {
         double a = numbers.back();
         numbers.pop_back();
         if (operators.back() == "x") {
-          std::cout << "[WIDPIO]: stod(x) " << args[i+1] << std::endl;
           numbers.push_back(MultiplyNumbers(a, std::stod(args[i+1])));
         }
         if (operators.back() == "/") {
-      std::cout << "[WIDPIO]: stod(/) " << args[i+1] << std::endl;
           numbers.push_back(DivideNumbers(a, std::stod(args[i+1])));
         }
         ++i;  // iterate past the next variable since it was already used
       }
     } else {
-      std::cout << "[WIDPIO]: stod(else) " << args[i] << std::endl;
       numbers.push_back(std::stod(args[i]));
     }
   }

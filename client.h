@@ -33,7 +33,7 @@ class DomainSocketClient : public DomainSocket {
 
 struct ThreadData {
   int memArrayNumber;
-  int operations = 0;
+  int lines = 0;
   double sum = 0;
 };
 

@@ -21,13 +21,12 @@ const char* kClientSem = "ctaks_client";
 
 #define CLIENT_SEM "ctaks_client"
 
-#define SHMPATH "csvshmem"
+#define SHMPATH "testshm"
 
 const int kArraySize = 4;
-const int kMemFourthSize = (1 << 19);
+const int kMemFourthSize = 524288;
 
 struct SharedMemoryStore {
-  std::size_t buffer_size[kArraySize];
   char buffer[kArraySize][kMemFourthSize];
 };
 
